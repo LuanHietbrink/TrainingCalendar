@@ -9,6 +9,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useAuth } from '../auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 
 const sessionTypes = [
   { value: 'track', label: 'Track Work' },
@@ -39,8 +41,8 @@ export default function CalendarPage() {
   const now = new Date();
   const [selectedDay, setSelectedDay] = useState(null); // 'YYYY-MM-DD' or null
   const [sessions, setSessions] = useState({}); // { 'YYYY-MM-DD': [session, ...] }
-  const [newSession, setNewSession] = useState({ type: '', exercises: [] });
-  const [exercise, setExercise] = useState({ name: '', sets: '', reps: '' });
+  const [newSession, setNewSession] = useState({ type: '', exercises: [], commentary: '' });
+  const [exercise, setExercise] = useState({ name: '', sets: '', reps: '', weight: '', effort: '' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [month, setMonth] = useState(now.getMonth());
@@ -48,9 +50,14 @@ export default function CalendarPage() {
   const [hoveredDay, setHoveredDay] = useState(null); // 'YYYY-MM-DD' or null
   const [showAddSession, setShowAddSession] = useState(false); // for modal add form
   const [editSessionIdx, setEditSessionIdx] = useState(null); // index of session being edited
-  const [editSession, setEditSession] = useState({ type: '', exercises: [] });
-  const [editExercise, setEditExercise] = useState({ name: '', sets: '', reps: '' });
+  const [editSession, setEditSession] = useState({ type: '', exercises: [], commentary: '' });
+  const [editExercise, setEditExercise] = useState({ name: '', sets: '', reps: '', weight: '', effort: '' });
   const [editSaving, setEditSaving] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { type: 'session' | 'exercise', idx: number, exerciseIdx?: number }
+  const [exercisesList, setExercisesList] = useState([]);
+  const [exerciseDialogOpen, setExerciseDialogOpen] = useState(false);
+  const [newExercise, setNewExercise] = useState({ name: '', type: sessionTypes[0].value });
 
   const daysInMonth = getDaysInMonth(year, month);
   const firstDayOfWeek = getFirstDayOfWeek(year, month); // 0 (Sun) - 6 (Sat)
@@ -67,12 +74,20 @@ export default function CalendarPage() {
       .catch(() => setLoading(false));
   }, [authFetch]);
 
+  // Fetch exercises
+  const fetchExercisesList = async () => {
+    const res = await authFetch('http://localhost:5000/api/exercises');
+    const data = await res.json();
+    setExercisesList(data);
+  };
+  useEffect(() => { fetchExercisesList(); }, [authFetch]);
+
   const handleDayClick = (day) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     setSelectedDay(dateStr);
     setShowAddSession(false);
-    setNewSession({ type: '', exercises: [] });
-    setExercise({ name: '', sets: '', reps: '' });
+    setNewSession({ type: '', exercises: [], commentary: '' });
+    setExercise({ name: '', sets: '', reps: '', weight: '', effort: '' });
   };
 
   const handleAddSession = async () => {
@@ -87,7 +102,7 @@ export default function CalendarPage() {
       const res = await authFetch('http://localhost:5000/api/calendar');
       const data = await res.json();
       setSessions(data);
-      setNewSession({ type: '', exercises: [] });
+      setNewSession({ type: '', exercises: [], commentary: '' });
       setShowAddSession(false);
     } catch (err) {
       // handle error
@@ -101,7 +116,7 @@ export default function CalendarPage() {
       ...prev,
       exercises: [...prev.exercises, exercise],
     }));
-    setExercise({ name: '', sets: '', reps: '' });
+    setExercise({ name: '', sets: '', reps: '', weight: '', effort: '' });
   };
 
   const handleMonthChange = (e) => setMonth(Number(e.target.value));
@@ -168,7 +183,7 @@ export default function CalendarPage() {
   const handleEditSessionClick = (idx) => {
     setEditSessionIdx(idx);
     setEditSession({ ...selectedDaySessions[idx] });
-    setEditExercise({ name: '', sets: '', reps: '' });
+    setEditExercise({ name: '', sets: '', reps: '', weight: '', effort: '' });
   };
 
   const handleEditSessionSave = async () => {
@@ -196,22 +211,62 @@ export default function CalendarPage() {
       ...prev,
       exercises: [...prev.exercises, editExercise],
     }));
-    setEditExercise({ name: '', sets: '', reps: '' });
+    setEditExercise({ name: '', sets: '', reps: '', weight: '', effort: '' });
   };
 
   const handleDeleteSession = async (idx) => {
-    try {
-      await authFetch(`http://localhost:5000/api/calendar/${selectedDay}/${idx}`, {
-        method: 'DELETE',
-      });
-      // Refresh sessions
-      const res = await authFetch('http://localhost:5000/api/calendar');
-      const data = await res.json();
-      setSessions(data);
-    } catch (err) {
-      // handle error
-    }
+    setDeleteTarget({ type: 'session', idx });
+    setDeleteConfirmOpen(true);
   };
+
+  const handleDeleteExercise = (exerciseIdx) => {
+    setDeleteTarget({ type: 'exercise', idx: editSessionIdx, exerciseIdx });
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteTarget.type === 'session') {
+      try {
+        await authFetch(`http://localhost:5000/api/calendar/${selectedDay}/${deleteTarget.idx}`, {
+          method: 'DELETE',
+        });
+        // Refresh sessions
+        const res = await authFetch('http://localhost:5000/api/calendar');
+        const data = await res.json();
+        setSessions(data);
+      } catch (err) {
+        // handle error
+      }
+    } else if (deleteTarget.type === 'exercise') {
+      const updatedExercises = editSession.exercises.filter((_, idx) => idx !== deleteTarget.exerciseIdx);
+      setEditSession(prev => ({ ...prev, exercises: updatedExercises }));
+    }
+    setDeleteConfirmOpen(false);
+    setDeleteTarget(null);
+  };
+
+  // Add exercise handler
+  const handleAddExerciseToDb = async () => {
+    await authFetch('http://localhost:5000/api/exercises', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newExercise),
+    });
+    await fetchExercisesList();
+    setExerciseDialogOpen(false);
+    setNewExercise({ name: '', type: sessionTypes[0].value });
+  };
+
+  // Filter exercises by session type
+  const filteredExercises = newSession.type
+    ? exercisesList.filter(ex => ex.type === newSession.type)
+    : exercisesList;
+  const filteredEditExercises = editSession.type
+    ? exercisesList.filter(ex => ex.type === editSession.type)
+    : exercisesList;
+
+  // Helper to determine if current session type is 'track'
+  const isTrackSession = (type) => type === 'track';
 
   return (
     <Box sx={{ p: 2, background: '#f4f6f8', minHeight: '100vh' }}>
@@ -219,15 +274,25 @@ export default function CalendarPage() {
         <Typography variant="h4" color="primary" gutterBottom>
           Training Calendar
         </Typography>
-        <Button
-          variant="outlined"
-          color="secondary"
-          startIcon={<LogoutIcon />}
-          onClick={handleLogout}
-          sx={{ ml: 2 }}
-        >
-          Log out
-        </Button>
+        <Box>
+          <Button
+            variant="outlined"
+            color="primary"
+            onClick={() => navigate('/exercises')}
+            sx={{ mr: 2 }}
+          >
+            Manage Exercises
+          </Button>
+          <Button
+            variant="outlined"
+            color="secondary"
+            startIcon={<LogoutIcon />}
+            onClick={handleLogout}
+            sx={{ ml: 2 }}
+          >
+            Log out
+          </Button>
+        </Box>
       </Box>
       <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
         <IconButton onClick={handlePrevMonth} size="small"><ArrowBackIosNewIcon /></IconButton>
@@ -270,6 +335,9 @@ export default function CalendarPage() {
         maxWidth: 1100,
         mx: 'auto',
       }}>
+        <Typography variant="h5" align="center" sx={{ mb: 2, fontWeight: 600, color: 'primary.main' }}>
+          {months[month]} {year}
+        </Typography>
         <Grid container spacing={0} sx={{ mb: 1 }}>
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((wd) => (
             <Grid item xs={12/7} key={wd}>
@@ -352,6 +420,25 @@ export default function CalendarPage() {
           </Grid>
         ))}
       </Box>
+      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>
+            {deleteTarget?.type === 'session' 
+              ? 'Are you sure you want to delete this session? This action cannot be undone.'
+              : 'Are you sure you want to delete this exercise? This action cannot be undone.'
+            }
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmOpen(false)} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={confirmDelete} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Dialog open={!!selectedDay} onClose={() => { setSelectedDay(null); setShowAddSession(false); setEditSessionIdx(null); }} maxWidth="sm" fullWidth>
         <DialogTitle>
           {selectedDay} — Sessions
@@ -381,6 +468,14 @@ export default function CalendarPage() {
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                     {session.exercises.length} exercise{session.exercises.length !== 1 ? 's' : ''}
                   </Typography>
+                  {session.commentary && (
+                    <Box sx={{ mt: 1, mb: 1 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Commentary:</Typography>
+                      <Box sx={{ background: '#f5f5f5', borderRadius: 1, p: 1 }}>
+                        <div dangerouslySetInnerHTML={{ __html: session.commentary }} />
+                      </Box>
+                    </Box>
+                  )}
                   <List dense>
                     {session.exercises.map((ex, exIdx) => (
                       <ListItem key={exIdx} sx={{ pl: 0 }}>
@@ -388,6 +483,8 @@ export default function CalendarPage() {
                           primary={
                             <span>
                               <b>{ex.name}</b> — {ex.sets} sets x {ex.reps} reps
+                              {ex.weight ? ` @ ${ex.weight} kg` : ''}
+                              {ex.effort ? `, ${ex.effort}% Effort` : ''}
                             </span>
                           }
                         />
@@ -420,19 +517,34 @@ export default function CalendarPage() {
                 {newSession.exercises.map((ex, idx) => (
                   <ListItem key={idx}>
                     <ListItemText
-                      primary={`${ex.name} — ${ex.sets} sets x ${ex.reps} reps`}
+                      primary={`${ex.name} — ${ex.sets} sets x ${ex.reps} reps${ex.weight ? ` @ ${ex.weight} kg` : ''}${ex.effort ? `, ${ex.effort}% Effort` : ''}`}
                     />
                   </ListItem>
                 ))}
               </List>
+              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>Commentary:</Typography>
+              <ReactQuill
+                theme="snow"
+                value={newSession.commentary || ''}
+                onChange={val => setNewSession(s => ({ ...s, commentary: val }))}
+                style={{ background: '#fff', marginBottom: 16 }}
+              />
               <Grid container spacing={1} alignItems="center">
-                <Grid item xs={4}>
+                <Grid item xs={5}>
                   <TextField
+                    select
                     label="Exercise"
                     value={exercise.name}
                     onChange={e => setExercise(ex => ({ ...ex, name: e.target.value }))}
                     fullWidth
-                  />
+                  >
+                    {filteredExercises.map(ex => (
+                      <MenuItem key={ex._id} value={ex.name}>{ex.name} ({sessionTypes.find(t => t.value === ex.type)?.label || ex.type})</MenuItem>
+                    ))}
+                    <MenuItem value="__add_new__" onClick={() => setExerciseDialogOpen(true)}>
+                      <em>Add new exercise...</em>
+                    </MenuItem>
+                  </TextField>
                 </Grid>
                 <Grid item xs={3}>
                   <TextField
@@ -450,6 +562,26 @@ export default function CalendarPage() {
                     value={exercise.reps}
                     onChange={e => setExercise(ex => ({ ...ex, reps: e.target.value }))}
                     fullWidth
+                  />
+                </Grid>
+                <Grid item xs={3}>
+                  <TextField
+                    label="Weight"
+                    type="number"
+                    value={exercise.weight}
+                    onChange={e => setExercise(ex => ({ ...ex, weight: e.target.value }))}
+                    fullWidth
+                    InputProps={{ endAdornment: <span style={{marginLeft:4}}>kg</span> }}
+                  />
+                </Grid>
+                <Grid item xs={3}>
+                  <TextField
+                    label="Effort"
+                    type="number"
+                    value={exercise.effort}
+                    onChange={e => setExercise(ex => ({ ...ex, effort: e.target.value }))}
+                    fullWidth
+                    InputProps={{ endAdornment: <span style={{marginLeft:4}}>%</span> }}
                   />
                 </Grid>
                 <Grid item xs={2}>
@@ -480,21 +612,43 @@ export default function CalendarPage() {
               <Typography variant="subtitle1">Exercises</Typography>
               <List>
                 {editSession.exercises.map((ex, idx) => (
-                  <ListItem key={idx}>
+                  <ListItem key={idx} sx={{ pl: 0, pr: 0 }}>
                     <ListItemText
                       primary={`${ex.name} — ${ex.sets} sets x ${ex.reps} reps`}
                     />
+                    <IconButton 
+                      size="small" 
+                      color="error"
+                      onClick={() => handleDeleteExercise(idx)}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
                   </ListItem>
                 ))}
               </List>
+              <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>Commentary:</Typography>
+              <ReactQuill
+                theme="snow"
+                value={editSession.commentary || ''}
+                onChange={val => setEditSession(s => ({ ...s, commentary: val }))}
+                style={{ background: '#fff', marginBottom: 16 }}
+              />
               <Grid container spacing={1} alignItems="center">
-                <Grid item xs={4}>
+                <Grid item xs={5}>
                   <TextField
+                    select
                     label="Exercise"
                     value={editExercise.name}
                     onChange={e => setEditExercise(ex => ({ ...ex, name: e.target.value }))}
                     fullWidth
-                  />
+                  >
+                    {filteredEditExercises.map(ex => (
+                      <MenuItem key={ex._id} value={ex.name}>{ex.name} ({sessionTypes.find(t => t.value === ex.type)?.label || ex.type})</MenuItem>
+                    ))}
+                    <MenuItem value="__add_new__" onClick={() => setExerciseDialogOpen(true)}>
+                      <em>Add new exercise...</em>
+                    </MenuItem>
+                  </TextField>
                 </Grid>
                 <Grid item xs={3}>
                   <TextField
@@ -512,6 +666,26 @@ export default function CalendarPage() {
                     value={editExercise.reps}
                     onChange={e => setEditExercise(ex => ({ ...ex, reps: e.target.value }))}
                     fullWidth
+                  />
+                </Grid>
+                <Grid item xs={3}>
+                  <TextField
+                    label="Weight"
+                    type="number"
+                    value={editExercise.weight}
+                    onChange={e => setEditExercise(ex => ({ ...ex, weight: e.target.value }))}
+                    fullWidth
+                    InputProps={{ endAdornment: <span style={{marginLeft:4}}>kg</span> }}
+                  />
+                </Grid>
+                <Grid item xs={3}>
+                  <TextField
+                    label="Effort"
+                    type="number"
+                    value={editExercise.effort}
+                    onChange={e => setEditExercise(ex => ({ ...ex, effort: e.target.value }))}
+                    fullWidth
+                    InputProps={{ endAdornment: <span style={{marginLeft:4}}>%</span> }}
                   />
                 </Grid>
                 <Grid item xs={2}>
@@ -542,6 +716,34 @@ export default function CalendarPage() {
           <Button onClick={() => { setSelectedDay(null); setShowAddSession(false); setEditSessionIdx(null); }} color="secondary">
             Close
           </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={exerciseDialogOpen} onClose={() => setExerciseDialogOpen(false)}>
+        <DialogTitle>Add Exercise</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Name"
+            value={newExercise.name}
+            onChange={e => setNewExercise(ex => ({ ...ex, name: e.target.value }))}
+            fullWidth
+            margin="normal"
+          />
+          <TextField
+            select
+            label="Type"
+            value={newExercise.type}
+            onChange={e => setNewExercise(ex => ({ ...ex, type: e.target.value }))}
+            fullWidth
+            margin="normal"
+          >
+            {sessionTypes.map(option => (
+              <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+            ))}
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExerciseDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleAddExerciseToDb} variant="contained">Add</Button>
         </DialogActions>
       </Dialog>
     </Box>
