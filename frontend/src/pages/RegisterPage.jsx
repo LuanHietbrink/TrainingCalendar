@@ -7,12 +7,19 @@ import { useAuth } from '../auth/AuthContext';
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const { register } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    
     const res = await register(email, password);
     if (res.success) {
       navigate('/calendar');
@@ -57,6 +64,16 @@ export default function RegisterPage() {
             autoComplete="new-password"
             value={password}
             onChange={e => setPassword(e.target.value)}
+          />
+          <TextField
+            margin="normal"
+            required
+            fullWidth
+            label="Confirm Password"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={e => setConfirmPassword(e.target.value)}
           />
           {error && <Alert severity="error">{error}</Alert>}
           <Button
