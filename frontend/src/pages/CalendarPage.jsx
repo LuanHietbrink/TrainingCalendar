@@ -12,12 +12,6 @@ import { useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
-const sessionTypes = [
-  { value: 'track', label: 'Track Work' },
-  { value: 'gym', label: 'Gym' },
-  { value: 'other', label: 'Other' },
-];
-
 const months = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
@@ -57,7 +51,10 @@ export default function CalendarPage() {
   const [deleteTarget, setDeleteTarget] = useState(null); // { type: 'session' | 'exercise', idx: number, exerciseIdx?: number }
   const [exercisesList, setExercisesList] = useState([]);
   const [exerciseDialogOpen, setExerciseDialogOpen] = useState(false);
-  const [newExercise, setNewExercise] = useState({ name: '', type: sessionTypes[0].value });
+  const [newExercise, setNewExercise] = useState({ name: '', type: '' });
+  const [sessionTypes, setSessionTypes] = useState([]);
+  const [sessionError, setSessionError] = useState('');
+  const [exerciseError, setExerciseError] = useState('');
 
   const daysInMonth = getDaysInMonth(year, month);
   const firstDayOfWeek = getFirstDayOfWeek(year, month); // 0 (Sun) - 6 (Sat)
@@ -82,6 +79,13 @@ export default function CalendarPage() {
   };
   useEffect(() => { fetchExercisesList(); }, [authFetch]);
 
+  const fetchSessionTypes = async () => {
+    const res = await authFetch('http://localhost:5000/api/session_types');
+    const data = await res.json();
+    setSessionTypes(data);
+  };
+  useEffect(() => { fetchSessionTypes(); }, [authFetch]);
+
   const handleDayClick = (day) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     setSelectedDay(dateStr);
@@ -91,6 +95,22 @@ export default function CalendarPage() {
   };
 
   const handleAddSession = async () => {
+    // Validate required fields
+    if (!newSession.type) {
+      setSessionError('Session type is required');
+      return;
+    }
+    if (!newSession.exercises.length) {
+      setSessionError('At least one exercise is required');
+      return;
+    }
+    for (const ex of newSession.exercises) {
+      if (!ex.name || !ex.sets || !ex.reps) {
+        setSessionError('All exercise fields (name, sets, reps) are required');
+        return;
+      }
+    }
+    setSessionError('');
     setSaving(true);
     try {
       await authFetch(`http://localhost:5000/api/calendar/${selectedDay}`, {
@@ -112,6 +132,12 @@ export default function CalendarPage() {
   };
 
   const handleAddExercise = () => {
+    // Validate required fields
+    if (!exercise.name || !exercise.sets || !exercise.reps) {
+      setExerciseError('Exercise name, sets, and reps are required');
+      return;
+    }
+    setExerciseError('');
     setNewSession(prev => ({
       ...prev,
       exercises: [...prev.exercises, exercise],
@@ -254,7 +280,7 @@ export default function CalendarPage() {
     });
     await fetchExercisesList();
     setExerciseDialogOpen(false);
-    setNewExercise({ name: '', type: sessionTypes[0].value });
+    setNewExercise({ name: '', type: '' });
   };
 
   // Filter exercises by session type
@@ -281,7 +307,15 @@ export default function CalendarPage() {
             onClick={() => navigate('/exercises')}
             sx={{ mr: 2 }}
           >
-            Manage Exercises
+            My Exercises
+          </Button>
+          <Button
+            variant="outlined"
+            color="primary"
+            onClick={() => navigate('/session-types')}
+            sx={{ mr: 2 }}
+          >
+            Manage Session Types
           </Button>
           <Button
             variant="outlined"
@@ -408,11 +442,11 @@ export default function CalendarPage() {
                         </Fab>
                       </Tooltip>
                     )}
-                    {daySessions.length > 0 && (
+                    {/* {daySessions.length > 0 && (
                       <Typography variant="caption" color="secondary" sx={{ position: 'absolute', bottom: 8, left: 8 }}>
                         {daySessions.length} session{daySessions.length > 1 ? 's' : ''}
                       </Typography>
-                    )}
+                    )} */}
                   </Box>
                 </Grid>
               );
@@ -441,7 +475,7 @@ export default function CalendarPage() {
       </Dialog>
       <Dialog open={!!selectedDay} onClose={() => { setSelectedDay(null); setShowAddSession(false); setEditSessionIdx(null); }} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {selectedDay} — Sessions
+          {selectedDay} — {selectedDaySessions.length} session{selectedDaySessions.length !== 1 ? 's' : ''}
           <IconButton
             aria-label="close"
             onClick={() => { setSelectedDay(null); setShowAddSession(false); setEditSessionIdx(null); }}
@@ -497,6 +531,7 @@ export default function CalendarPage() {
           )}
           {showAddSession && editSessionIdx === null && (
             <Box>
+              {sessionError && <Typography color="error" sx={{ mb: 1 }}>{sessionError}</Typography>}
               <TextField
                 select
                 label="Session Type"
@@ -590,6 +625,7 @@ export default function CalendarPage() {
                   </IconButton>
                 </Grid>
               </Grid>
+              {exerciseError && <Typography color="error" sx={{ mb: 1 }}>{exerciseError}</Typography>}
             </Box>
           )}
           {editSessionIdx !== null && (

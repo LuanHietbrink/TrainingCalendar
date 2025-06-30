@@ -18,6 +18,8 @@ db = client['training_calendar']
 users_col = db['users']
 calendar_col = db['calendar']
 exercises_col = db['exercises']
+session_types_col = db['session_types']
+
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -174,6 +176,53 @@ def delete_exercise(exercise_id):
     if result.deleted_count == 0:
         return jsonify({'msg': 'Exercise not found'}), 404
     return jsonify({'msg': 'Exercise deleted'}), 200
+
+@app.route('/api/session_types', methods=['GET'])
+@jwt_required()
+def get_session_types():
+    email = get_jwt_identity()
+    session_types = list(session_types_col.find({'email': email}))
+    return jsonify([
+        {'_id': str(st['_id']), 'value': st['value'], 'label': st['label']} for st in session_types
+    ]), 200
+
+@app.route('/api/session_types', methods=['POST'])
+@jwt_required()
+def create_session_type():
+    email = get_jwt_identity()
+    data = request.get_json()
+    value = data.get('value')
+    label = data.get('label')
+    if not value or not label:
+        return jsonify({'msg': 'Missing value or label'}), 400
+    # Prevent duplicate value for this user
+    if session_types_col.find_one({'email': email, 'value': value}):
+        return jsonify({'msg': 'Session type already exists'}), 400
+    result = session_types_col.insert_one({'email': email, 'value': value, 'label': label})
+    return jsonify({'_id': str(result.inserted_id), 'value': value, 'label': label}), 201
+
+@app.route('/api/session_types/<session_type_id>', methods=['PUT'])
+@jwt_required()
+def update_session_type(session_type_id):
+    email = get_jwt_identity()
+    data = request.get_json()
+    value = data.get('value')
+    label = data.get('label')
+    if not value or not label:
+        return jsonify({'msg': 'Missing value or label'}), 400
+    result = session_types_col.update_one({'_id': ObjectId(session_type_id), 'email': email}, {'$set': {'value': value, 'label': label}})
+    if result.matched_count == 0:
+        return jsonify({'msg': 'Session type not found'}), 404
+    return jsonify({'_id': session_type_id, 'value': value, 'label': label}), 200
+
+@app.route('/api/session_types/<session_type_id>', methods=['DELETE'])
+@jwt_required()
+def delete_session_type(session_type_id):
+    email = get_jwt_identity()
+    result = session_types_col.delete_one({'_id': ObjectId(session_type_id), 'email': email})
+    if result.deleted_count == 0:
+        return jsonify({'msg': 'Session type not found'}), 404
+    return jsonify({'msg': 'Session type deleted'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000) 

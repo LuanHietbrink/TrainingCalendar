@@ -1,28 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
+import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import { useAuth } from '../auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-export default function ExercisesPage() {
+export default function SessionTypesPage() {
   const { authFetch } = useAuth();
   const navigate = useNavigate();
-  const [exercises, setExercises] = useState([]);
+  const [sessionTypes, setSessionTypes] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [current, setCurrent] = useState({ _id: null, name: '', type: '' });
+  const [current, setCurrent] = useState({ _id: null, value: '', label: '' });
   const [isEdit, setIsEdit] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
-  const [sessionTypes, setSessionTypes] = useState([]);
-  const [exerciseError, setExerciseError] = useState('');
-
-  const fetchExercises = async () => {
-    const res = await authFetch('http://localhost:5000/api/exercises');
-    const data = await res.json();
-    setExercises(data);
-  };
 
   const fetchSessionTypes = async () => {
     const res = await authFetch('http://localhost:5000/api/session_types');
@@ -30,17 +22,14 @@ export default function ExercisesPage() {
     setSessionTypes(data);
   };
 
-  useEffect(() => {
-    fetchExercises();
-    fetchSessionTypes();
-  }, [authFetch]);
+  useEffect(() => { fetchSessionTypes(); }, []);
 
-  const handleOpenDialog = (exercise = null) => {
-    if (exercise) {
-      setCurrent(exercise);
+  const handleOpenDialog = (sessionType = null) => {
+    if (sessionType) {
+      setCurrent(sessionType);
       setIsEdit(true);
     } else {
-      setCurrent({ _id: null, name: '', type: '' });
+      setCurrent({ _id: null, value: '', label: '' });
       setIsEdit(false);
     }
     setDialogOpen(true);
@@ -48,68 +37,63 @@ export default function ExercisesPage() {
 
   const handleCloseDialog = () => {
     setDialogOpen(false);
-    setCurrent({ _id: null, name: '', type: '' });
+    setCurrent({ _id: null, value: '', label: '' });
     setIsEdit(false);
   };
 
   const handleSave = async () => {
-    if (!current.name || !current.type) {
-      setExerciseError('Exercise name and type are required');
-      return;
-    }
-    setExerciseError('');
     if (isEdit) {
-      await authFetch(`http://localhost:5000/api/exercises/${current._id}`, {
+      await authFetch(`http://localhost:5000/api/session_types/${current._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: current.name, type: current.type }),
+        body: JSON.stringify({ value: current.value, label: current.label }),
       });
     } else {
-      await authFetch('http://localhost:5000/api/exercises', {
+      await authFetch('http://localhost:5000/api/session_types', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: current.name, type: current.type }),
+        body: JSON.stringify({ value: current.value, label: current.label }),
       });
     }
-    fetchExercises();
+    fetchSessionTypes();
     handleCloseDialog();
   };
 
   const handleDelete = async () => {
-    await authFetch(`http://localhost:5000/api/exercises/${deleteId}`, { method: 'DELETE' });
+    await authFetch(`http://localhost:5000/api/session_types/${deleteId}`, { method: 'DELETE' });
     setDeleteDialogOpen(false);
     setDeleteId(null);
-    fetchExercises();
+    fetchSessionTypes();
   };
 
   return (
     <Box sx={{ p: 4, maxWidth: 700, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="h4" color="primary" gutterBottom>Manage Exercises</Typography>
+        <Typography variant="h4" color="primary" gutterBottom>Manage Session Types</Typography>
         <Button variant="outlined" color="primary" onClick={() => navigate('/calendar')}>
           Back to Calendar
         </Button>
       </Box>
       <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()} sx={{ mb: 2 }}>
-        Add Exercise
+        Add Session Type
       </Button>
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Type</TableCell>
+              <TableCell>Value</TableCell>
+              <TableCell>Label</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {exercises.map((ex) => (
-              <TableRow key={ex._id}>
-                <TableCell>{ex.name}</TableCell>
-                <TableCell>{sessionTypes.find(t => t.value === ex.type)?.label || ex.type}</TableCell>
+            {sessionTypes.map((st) => (
+              <TableRow key={st._id}>
+                <TableCell>{st.value}</TableCell>
+                <TableCell>{st.label}</TableCell>
                 <TableCell align="right">
-                  <IconButton onClick={() => handleOpenDialog(ex)}><EditIcon /></IconButton>
-                  <IconButton color="error" onClick={() => { setDeleteId(ex._id); setDeleteDialogOpen(true); }}><DeleteIcon /></IconButton>
+                  <IconButton onClick={() => handleOpenDialog(st)}><EditIcon /></IconButton>
+                  <IconButton color="error" onClick={() => { setDeleteId(st._id); setDeleteDialogOpen(true); }}><DeleteIcon /></IconButton>
                 </TableCell>
               </TableRow>
             ))}
@@ -117,30 +101,24 @@ export default function ExercisesPage() {
         </Table>
       </TableContainer>
       <Dialog open={dialogOpen} onClose={handleCloseDialog}>
-        <DialogTitle>{isEdit ? 'Edit Exercise' : 'Add Exercise'}</DialogTitle>
+        <DialogTitle>{isEdit ? 'Edit Session Type' : 'Add Session Type'}</DialogTitle>
         <DialogContent>
           <TextField
-            label="Name"
-            value={current.name}
-            onChange={e => setCurrent(c => ({ ...c, name: e.target.value }))}
+            label="Value"
+            value={current.value}
+            onChange={e => setCurrent(c => ({ ...c, value: e.target.value }))}
             fullWidth
             margin="normal"
             required
           />
           <TextField
-            select
-            label="Type"
-            value={current.type}
-            onChange={e => setCurrent(c => ({ ...c, type: e.target.value }))}
+            label="Label"
+            value={current.label}
+            onChange={e => setCurrent(c => ({ ...c, label: e.target.value }))}
             fullWidth
             margin="normal"
             required
-          >
-            {sessionTypes.map(option => (
-              <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
-            ))}
-          </TextField>
-          {exerciseError && <Typography color="error" sx={{ mb: 1 }}>{exerciseError}</Typography>}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
@@ -148,9 +126,9 @@ export default function ExercisesPage() {
         </DialogActions>
       </Dialog>
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle>Delete Exercise</DialogTitle>
+        <DialogTitle>Delete Session Type</DialogTitle>
         <DialogContent>
-          <Typography>Are you sure you want to delete this exercise?</Typography>
+          <Typography>Are you sure you want to delete this session type?</Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
