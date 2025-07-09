@@ -55,6 +55,9 @@ export default function CalendarPage() {
   const [sessionTypes, setSessionTypes] = useState([]);
   const [sessionError, setSessionError] = useState('');
   const [exerciseError, setExerciseError] = useState('');
+  const [sessionTypeDialogOpen, setSessionTypeDialogOpen] = useState(false);
+  const [newSessionType, setNewSessionType] = useState({ value: '', label: '' });
+  const [sessionTypeError, setSessionTypeError] = useState('');
 
   const daysInMonth = getDaysInMonth(year, month);
   const firstDayOfWeek = getFirstDayOfWeek(year, month); // 0 (Sun) - 6 (Sat)
@@ -280,6 +283,12 @@ export default function CalendarPage() {
     });
     await fetchExercisesList();
     setExerciseDialogOpen(false);
+    // Select the new exercise by default
+    if (showAddSession && editSessionIdx === null) {
+      setExercise(ex => ({ ...ex, name: newExercise.name }));
+    } else if (editSessionIdx !== null) {
+      setEditExercise(ex => ({ ...ex, name: newExercise.name }));
+    }
     setNewExercise({ name: '', type: '' });
   };
 
@@ -293,6 +302,28 @@ export default function CalendarPage() {
 
   // Helper to determine if current session type is 'track'
   const isTrackSession = (type) => type === 'track';
+
+  const handleAddSessionTypeToDb = async () => {
+    if (!newSessionType.value || !newSessionType.label) {
+      setSessionTypeError('Both value and label are required');
+      return;
+    }
+    setSessionTypeError('');
+    await authFetch('http://localhost:5000/api/session_types', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newSessionType),
+    });
+    await fetchSessionTypes();
+    setSessionTypeDialogOpen(false);
+    // Select the new session type by default
+    if (showAddSession && editSessionIdx === null) {
+      setNewSession(s => ({ ...s, type: newSessionType.value }));
+    } else if (editSessionIdx !== null) {
+      setEditSession(s => ({ ...s, type: newSessionType.value }));
+    }
+    setNewSessionType({ value: '', label: '' });
+  };
 
   return (
     <Box sx={{ p: 2, background: '#f4f6f8', minHeight: '100vh' }}>
@@ -536,7 +567,13 @@ export default function CalendarPage() {
                 select
                 label="Session Type"
                 value={newSession.type}
-                onChange={e => setNewSession(s => ({ ...s, type: e.target.value }))}
+                onChange={e => {
+                  if (e.target.value === "__add_new_session_type__") {
+                    setSessionTypeDialogOpen(true);
+                  } else {
+                    setNewSession(s => ({ ...s, type: e.target.value }));
+                  }
+                }}
                 fullWidth
                 margin="normal"
               >
@@ -545,6 +582,9 @@ export default function CalendarPage() {
                     {option.label}
                   </MenuItem>
                 ))}
+                <MenuItem value="__add_new_session_type__" onClick={() => setSessionTypeDialogOpen(true)}>
+                  <em>Add new session type...</em>
+                </MenuItem>
               </TextField>
               <Divider sx={{ my: 2 }} />
               <Typography variant="subtitle1">Exercises</Typography>
@@ -634,7 +674,13 @@ export default function CalendarPage() {
                 select
                 label="Session Type"
                 value={editSession.type}
-                onChange={e => setEditSession(s => ({ ...s, type: e.target.value }))}
+                onChange={e => {
+                  if (e.target.value === "__add_new_session_type__") {
+                    setSessionTypeDialogOpen(true);
+                  } else {
+                    setEditSession(s => ({ ...s, type: e.target.value }));
+                  }
+                }}
                 fullWidth
                 margin="normal"
               >
@@ -643,6 +689,9 @@ export default function CalendarPage() {
                     {option.label}
                   </MenuItem>
                 ))}
+                <MenuItem value="__add_new_session_type__" onClick={() => setSessionTypeDialogOpen(true)}>
+                  <em>Add new session type...</em>
+                </MenuItem>
               </TextField>
               <Divider sx={{ my: 2 }} />
               <Typography variant="subtitle1">Exercises</Typography>
@@ -780,6 +829,30 @@ export default function CalendarPage() {
         <DialogActions>
           <Button onClick={() => setExerciseDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleAddExerciseToDb} variant="contained">Add</Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={sessionTypeDialogOpen} onClose={() => setSessionTypeDialogOpen(false)}>
+        <DialogTitle>Add Session Type</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Value (unique key)"
+            value={newSessionType.value}
+            onChange={e => setNewSessionType(st => ({ ...st, value: e.target.value }))}
+            fullWidth
+            margin="normal"
+          />
+          <TextField
+            label="Label (display name)"
+            value={newSessionType.label}
+            onChange={e => setNewSessionType(st => ({ ...st, label: e.target.value }))}
+            fullWidth
+            margin="normal"
+          />
+          {sessionTypeError && <Typography color="error" sx={{ mt: 1 }}>{sessionTypeError}</Typography>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSessionTypeDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleAddSessionTypeToDb} variant="contained">Add</Button>
         </DialogActions>
       </Dialog>
     </Box>
