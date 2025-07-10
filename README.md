@@ -9,4 +9,4 @@ As a track and field athlete I usually kept logs of my training in either Excel 
 
 The website can be visited [here](https://training-calendar-drab.vercel.app/)
 
-![Website Screenshot]()![Screenshot 2025-07-10 101857](https://github.com/user-attachments/assets/1cb54e34-add4-4505-88f5-47a78261c310)
+![Screenshot 2025-07-10 101857](https://github.com/user-attachments/assets/1cb54e34-add4-4505-88f5-47a78261c310)
